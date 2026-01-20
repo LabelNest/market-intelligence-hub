@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react';
 import { FileText, CheckCircle2, Clock, TrendingUp } from 'lucide-react';
 import { Header } from '@/components/dashboard/Header';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { NewsTable } from '@/components/dashboard/NewsTable';
+import { NewsCardsGrid } from '@/components/dashboard/NewsCard';
 import { NewsFilters } from '@/components/dashboard/NewsFilters';
-import { SourceChart } from '@/components/dashboard/SourceChart';
+import { SourceBarChart } from '@/components/dashboard/SourceBarChart';
 import { KeywordCloud } from '@/components/dashboard/KeywordCloud';
 import { mockNewsItems, mockStats } from '@/lib/mockData';
 import { NewsFilters as FiltersType } from '@/lib/types';
@@ -116,14 +116,14 @@ const Index = () => {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
-          <SourceChart data={mockStats.sourceBreakdown} />
+          <SourceBarChart data={mockStats.sourceBreakdown} />
           <KeywordCloud data={mockStats.keywordBreakdown} />
         </div>
 
-        {/* Filters & News Table */}
+        {/* Filters & News Cards */}
         <div className="space-y-4 animate-fade-in">
           <NewsFilters filters={filters} onFiltersChange={setFilters} />
-          <NewsTable items={filteredItems} />
+          <NewsCardsGrid items={filteredItems} />
         </div>
 
         {/* Backend Notice */}
