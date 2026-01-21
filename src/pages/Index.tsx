@@ -1,144 +1,152 @@
 import { useMemo, useState } from 'react';
-import { FileText, CheckCircle2, Clock, TrendingUp } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import { format, subDays } from 'date-fns';
 import { Header } from '@/components/dashboard/Header';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { NewsCardsGrid } from '@/components/dashboard/NewsCard';
 import { NewsFilters } from '@/components/dashboard/NewsFilters';
 import { SourceBarChart } from '@/components/dashboard/SourceBarChart';
 import { KeywordCloud } from '@/components/dashboard/KeywordCloud';
-import { mockNewsItems, mockStats } from '@/lib/mockData';
-import { NewsFilters as FiltersType } from '@/lib/types';
+import { useNewsData, NewsFilters as FiltersType } from '@/hooks/useNewsData';
 import { toast } from 'sonner';
 
 const Index = () => {
   const [filters, setFilters] = useState<FiltersType>({});
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [startDate, setStartDate] = useState<Date | undefined>(new Date(2025, 0, 1));
+  const [endDate, setEndDate] = useState<Date | undefined>(new Date(2025, 0, 15));
 
-  const filteredItems = useMemo(() => {
-    let items = [...mockNewsItems];
+  const {
+    newsRaw,
+    newsToProcess,
+    stats,
+    isLoading,
+    isCrawling,
+    isSummarizing,
+    crawlNews,
+    summarizeNews,
+    refreshAll,
+    exportNewsRaw,
+    exportNewsToProcess,
+  } = useNewsData(filters);
 
-    if (filters.search) {
-      const search = filters.search.toLowerCase();
-      items = items.filter(
-        (item) =>
-          item.title.toLowerCase().includes(search) ||
-          item.content.toLowerCase().includes(search)
-      );
-    }
-
-    if (filters.status) {
-      items = items.filter((item) => item.status === filters.status);
-    }
-
-    if (filters.sources && filters.sources.length > 0) {
-      items = items.filter((item) => filters.sources!.includes(item.source));
-    }
-
-    return items;
-  }, [filters]);
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsRefreshing(false);
-    toast.success('Data refreshed successfully');
+  const handleDateChange = (start: Date | undefined, end: Date | undefined) => {
+    setStartDate(start);
+    setEndDate(end);
   };
 
-  const handleExport = () => {
-    // Generate CSV from mock data
-    const headers = ['URL', 'Source', 'Published Date', 'Headline', 'AI Summary', 'Status'];
-    const csvContent = [
-      headers.join(','),
-      ...mockNewsItems.map((item) =>
-        [
-          `"${item.url}"`,
-          `"${item.source}"`,
-          `"${item.published_at || ''}"`,
-          `"${item.title.replace(/"/g, '""')}"`,
-          `"${(item.ai_summary || '').replace(/"/g, '""')}"`,
-          `"${item.status}"`,
-        ].join(',')
-      ),
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'news-export.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('CSV exported successfully');
+  const handleCrawl = () => {
+    if (startDate && endDate) {
+      crawlNews({
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(endDate, 'yyyy-MM-dd'),
+      });
+    } else {
+      toast.error('Please select a date range first');
+    }
   };
+
+  const handleSummarize = () => {
+    summarizeNews(undefined);
+  };
+
+  // Convert newsRaw to NewsItem format for NewsCardsGrid
+  const newsItems = useMemo(() => {
+    return newsRaw.map(item => ({
+      id: item.id,
+      source: item.source_name,
+      url: item.url,
+      title: item.headline,
+      published_at: item.published_at,
+      content: item.body_text || '',
+      keyword_hits: item.ai_keywords,
+      ai_summary: item.ai_summary,
+      status: item.extraction_status === 'Extracted' ? 'completed' as const : 'pending' as const,
+      created_at: item.created_at,
+    }));
+  }, [newsRaw]);
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto max-w-7xl px-4 py-8 space-y-8">
         <Header
-          onRefresh={handleRefresh}
-          onExport={handleExport}
-          isRefreshing={isRefreshing}
+          onRefresh={refreshAll}
+          onCrawl={handleCrawl}
+          onSummarize={handleSummarize}
+          onExportNewsRaw={exportNewsRaw}
+          onExportNewsToProcess={exportNewsToProcess}
+          isRefreshing={isLoading}
+          isCrawling={isCrawling}
+          isSummarizing={isSummarizing}
+          startDate={startDate}
+          endDate={endDate}
+          onDateChange={handleDateChange}
         />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-slide-up">
           <StatsCard
             title="Total Articles"
-            value={mockStats.totalArticles}
-            subtitle="Across all sources"
+            value={stats.totalArticles}
+            subtitle="In news_raw table"
             icon={FileText}
             variant="primary"
-            trend={{ value: 12.5, isPositive: true }}
           />
           <StatsCard
-            title="Processed"
-            value={mockStats.processedArticles}
+            title="Extracted"
+            value={stats.extractedArticles}
             subtitle="AI summaries generated"
             icon={CheckCircle2}
             variant="success"
-            trend={{ value: 8.3, isPositive: true }}
           />
           <StatsCard
             title="Pending"
-            value={mockStats.pendingArticles}
-            subtitle="Awaiting processing"
+            value={stats.pendingArticles}
+            subtitle="Awaiting AI processing"
             icon={Clock}
             variant="warning"
           />
           <StatsCard
-            title="Processing Rate"
-            value={`${Math.round((mockStats.processedArticles / mockStats.totalArticles) * 100)}%`}
-            subtitle="Completion rate"
-            icon={TrendingUp}
+            title="To Process"
+            value={newsToProcess.length}
+            subtitle="Non-matching articles"
+            icon={AlertTriangle}
             variant="accent"
           />
         </div>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
-          <SourceBarChart data={mockStats.sourceBreakdown} />
-          <KeywordCloud data={mockStats.keywordBreakdown} />
+          <SourceBarChart data={stats.sourceBreakdown} />
+          <KeywordCloud data={stats.keywordBreakdown} />
         </div>
 
         {/* Filters & News Cards */}
         <div className="space-y-4 animate-fade-in">
           <NewsFilters filters={filters} onFiltersChange={setFilters} />
-          <NewsCardsGrid items={filteredItems} />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-muted-foreground">Loading articles...</div>
+            </div>
+          ) : (
+            <NewsCardsGrid items={newsItems} />
+          )}
         </div>
 
-        {/* Backend Notice */}
-        <div className="rounded-xl border border-warning/20 bg-warning/5 p-4">
+        {/* Sources Info */}
+        <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-start gap-3">
-            <div className="rounded-md bg-warning/10 p-2">
-              <Clock className="h-5 w-5 text-warning" />
+            <div className="rounded-md bg-primary/10 p-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">
-                Backend Features Require Lovable Cloud
+                10 News Sources Monitored
               </p>
               <p className="text-sm text-muted-foreground">
-                To enable live news crawling, AI summarization, and persistent data storage, 
-                please enable Lovable Cloud in Connectors → Lovable Cloud → Tool Permissions.
+                PEI, DealStreetAsia, VCCircle, TechCrunch, Crunchbase News, ET, Moneycontrol, LiveMint, PR Newswire, BusinessWire
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                News frequency: 1-4 hours | Press releases: 4-6 hours | Articles filtered by private market keywords
               </p>
             </div>
           </div>

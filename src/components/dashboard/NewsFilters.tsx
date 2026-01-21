@@ -17,8 +17,12 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { NewsFilters as FiltersType } from '@/lib/types';
-import { availableSources } from '@/lib/mockData';
+import { NewsFilters as FiltersType } from '@/hooks/useNewsData';
+
+const availableSources = [
+  'TechCrunch', 'Crunchbase News', 'Moneycontrol', 'LiveMint', 'ET',
+  'PR Newswire', 'BusinessWire', 'VCCircle', 'DealStreetAsia', 'PEI'
+];
 
 interface NewsFiltersProps {
   filters: FiltersType;

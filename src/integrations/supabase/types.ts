@@ -14,7 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      news_raw: {
+        Row: {
+          ai_keywords: string[] | null
+          ai_summary: string | null
+          body_text: string | null
+          created_at: string
+          extraction_status: string
+          headline: string
+          id: string
+          published_at: string | null
+          source_name: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          ai_keywords?: string[] | null
+          ai_summary?: string | null
+          body_text?: string | null
+          created_at?: string
+          extraction_status?: string
+          headline: string
+          id?: string
+          published_at?: string | null
+          source_name: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          ai_keywords?: string[] | null
+          ai_summary?: string | null
+          body_text?: string | null
+          created_at?: string
+          extraction_status?: string
+          headline?: string
+          id?: string
+          published_at?: string | null
+          source_name?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      news_to_process: {
+        Row: {
+          created_at: string
+          id: string
+          published_at: string | null
+          source_name: string
+          source_url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          published_at?: string | null
+          source_name: string
+          source_url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          published_at?: string | null
+          source_name?: string
+          source_url?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
