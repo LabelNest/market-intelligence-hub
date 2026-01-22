@@ -196,9 +196,47 @@ Deno.serve(async (req) => {
 
     const { startDate, endDate } = await req.json();
     
+    // Validate presence
     if (!startDate || !endDate) {
       return new Response(
         JSON.stringify({ success: false, error: 'startDate and endDate are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate date format and parse
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid date format. Use YYYY-MM-DD' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate logical order
+    if (start > end) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'startDate must be before endDate' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate range (max 90 days to prevent resource abuse)
+    const daysDiff = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDiff > 90) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Date range cannot exceed 90 days' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate minimum date (January 2025)
+    const minDate = new Date('2025-01-01');
+    if (start < minDate) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'startDate cannot be before January 2025' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -289,7 +327,7 @@ Deno.serve(async (req) => {
       } else {
         const error = await response.text();
         console.error('Error inserting news_raw:', error);
-        insertResults.errors.push(`news_raw: ${error}`);
+        insertResults.errors.push('Failed to insert matching articles');
       }
     }
     
@@ -310,7 +348,7 @@ Deno.serve(async (req) => {
       } else {
         const error = await response.text();
         console.error('Error inserting news_to_process:', error);
-        insertResults.errors.push(`news_to_process: ${error}`);
+        insertResults.errors.push('Failed to insert articles to process');
       }
     }
     
@@ -330,9 +368,8 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error('Crawl error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
+      JSON.stringify({ success: false, error: 'Failed to crawl news sources. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
