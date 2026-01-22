@@ -41,7 +41,8 @@ Respond in JSON format:
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`AI Gateway error: ${error}`);
+    console.error('AI Gateway error:', error);
+    throw new Error('AI summarization service unavailable');
   }
 
   const data = await response.json();
@@ -133,7 +134,8 @@ Deno.serve(async (req) => {
     
     if (!fetchResponse.ok) {
       const error = await fetchResponse.text();
-      throw new Error(`Failed to fetch articles: ${error}`);
+      console.error('Failed to fetch articles:', error);
+      throw new Error('Failed to fetch articles from database');
     }
     
     const articles = await fetchResponse.json();
@@ -178,16 +180,15 @@ Deno.serve(async (req) => {
           console.log(`Successfully processed article: ${article.id}`);
         } else {
           const error = await updateResponse.text();
-          results.push({ id: article.id, success: false, error });
+          results.push({ id: article.id, success: false, error: 'Failed to save summary' });
           console.error(`Failed to update article ${article.id}:`, error);
         }
         
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 200));
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         console.error(`Error processing article ${article.id}:`, err);
-        results.push({ id: article.id, success: false, error: errorMessage });
+        results.push({ id: article.id, success: false, error: 'Processing failed' });
       }
     }
     
@@ -205,9 +206,8 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error('Summarization error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
+      JSON.stringify({ success: false, error: 'Failed to summarize articles. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
