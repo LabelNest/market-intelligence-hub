@@ -1,19 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { FileText, CheckCircle2, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Header } from '@/components/dashboard/Header';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { NewsCardsGrid } from '@/components/dashboard/NewsCard';
+import { ArticleDetailModal } from '@/components/dashboard/ArticleDetailModal';
 import { NewsFilters } from '@/components/dashboard/NewsFilters';
 import { SourceBarChart } from '@/components/dashboard/SourceBarChart';
 import { KeywordCloud } from '@/components/dashboard/KeywordCloud';
 import { useNewsData, NewsFilters as FiltersType } from '@/hooks/useNewsData';
+import { NewsItem } from '@/lib/types';
 import { toast } from 'sonner';
 
 const Index = () => {
   const [filters, setFilters] = useState<FiltersType>({});
   const [startDate, setStartDate] = useState<Date | undefined>(new Date(2025, 0, 1));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date(2025, 0, 15));
+  const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [resummarizingId, setResummarizingId] = useState<string | null>(null);
 
   const {
     newsRaw,
@@ -64,6 +69,27 @@ const Index = () => {
       created_at: item.created_at,
     }));
   }, [newsRaw]);
+
+  const handleArticleClick = useCallback((item: NewsItem) => {
+    setSelectedArticle(item);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleResummarize = useCallback((articleId: string) => {
+    setResummarizingId(articleId);
+    summarizeNews([articleId]);
+  }, [summarizeNews]);
+
+  // Update selected article when newsItems changes (after re-summarization)
+  useEffect(() => {
+    if (selectedArticle && resummarizingId) {
+      const updatedItem = newsItems.find(item => item.id === selectedArticle.id);
+      if (updatedItem && updatedItem.ai_summary !== selectedArticle.ai_summary) {
+        setSelectedArticle(updatedItem);
+        setResummarizingId(null);
+      }
+    }
+  }, [newsItems, selectedArticle, resummarizingId]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -128,7 +154,7 @@ const Index = () => {
               <div className="text-muted-foreground">Loading articles...</div>
             </div>
           ) : (
-            <NewsCardsGrid items={newsItems} />
+            <NewsCardsGrid items={newsItems} onArticleClick={handleArticleClick} />
           )}
         </div>
 
@@ -152,6 +178,15 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      {/* Article Detail Modal */}
+      <ArticleDetailModal
+        article={selectedArticle}
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onResummarize={handleResummarize}
+        isResummarizing={resummarizingId === selectedArticle?.id}
+      />
     </div>
   );
 };

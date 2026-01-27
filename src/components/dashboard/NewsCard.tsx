@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 
 interface NewsCardProps {
   item: NewsItem;
+  onClick?: () => void;
 }
 
 const statusConfig: Record<string, { icon: React.ElementType; className: string }> = {
@@ -16,12 +17,18 @@ const statusConfig: Record<string, { icon: React.ElementType; className: string 
   failed: { icon: AlertCircle, className: 'bg-destructive/10 text-destructive border-destructive/20' },
 };
 
-export function NewsCard({ item }: NewsCardProps) {
+export function NewsCard({ item, onClick }: NewsCardProps) {
   const status = statusConfig[item.status] || statusConfig.pending;
   const StatusIcon = status.icon;
 
   return (
-    <div className="group rounded-xl border bg-card p-5 shadow-card transition-all duration-300 hover:shadow-lg hover:border-primary/30 animate-fade-in">
+    <div
+      className="group rounded-xl border bg-card p-5 shadow-card transition-all duration-300 hover:shadow-lg hover:border-primary/30 animate-fade-in cursor-pointer"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <Badge variant="secondary" className="font-medium shrink-0">
@@ -100,9 +107,10 @@ export function NewsCard({ item }: NewsCardProps) {
 interface NewsCardsGridProps {
   items: NewsItem[];
   isLoading?: boolean;
+  onArticleClick?: (item: NewsItem) => void;
 }
 
-export function NewsCardsGrid({ items, isLoading }: NewsCardsGridProps) {
+export function NewsCardsGrid({ items, isLoading, onArticleClick }: NewsCardsGridProps) {
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -136,7 +144,7 @@ export function NewsCardsGrid({ items, isLoading }: NewsCardsGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {items.map((item) => (
-        <NewsCard key={item.id} item={item} />
+        <NewsCard key={item.id} item={item} onClick={() => onArticleClick?.(item)} />
       ))}
     </div>
   );
