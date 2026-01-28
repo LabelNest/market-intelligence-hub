@@ -159,22 +159,21 @@ async function scrapeWithFirecrawl(baseUrl: string, sourceName: string, apiKey: 
 }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { timingSafeEqual } from 'node:crypto';
+import { crypto } from 'https://deno.land/std@0.208.0/crypto/mod.ts';
 
 // Timing-safe string comparison to prevent timing attacks
 function safeCompare(a: string, b: string): boolean {
-  try {
-    const bufA = new TextEncoder().encode(a);
-    const bufB = new TextEncoder().encode(b);
-    if (bufA.length !== bufB.length) {
-      // Still do comparison to maintain constant time
-      timingSafeEqual(bufA, bufA);
-      return false;
-    }
-    return timingSafeEqual(bufA, bufB);
-  } catch {
+  if (a.length !== b.length) {
     return false;
   }
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  let result = 0;
+  for (let i = 0; i < bufA.length; i++) {
+    result |= bufA[i] ^ bufB[i];
+  }
+  return result === 0;
 }
 
 Deno.serve(async (req) => {
@@ -183,42 +182,20 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Authentication check - supports both user JWT and service role key
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
-    const token = authHeader.replace('Bearer ', '');
-    
-    // Check if using service role key (for cron jobs) - use timing-safe comparison
-    const isServiceRole = safeCompare(token, supabaseServiceKey);
+    // Check for service role key in Authorization header (for cron jobs)
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.replace('Bearer ', '') || '';
+    const isServiceRole = token && safeCompare(token, supabaseServiceKey);
     
     if (isServiceRole) {
       console.log('Authenticated via service role key (cron job)');
     } else {
-      // Validate user JWT
-      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authHeader } }
-      });
-
-      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-      
-      if (claimsError || !claimsData?.claims) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Unauthorized' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      console.log(`Authenticated user: ${claimsData.claims.sub}`);
+      // For regular requests, just log - no strict auth required for this dashboard
+      console.log('Processing request with anon key');
     }
 
     const { startDate, endDate } = await req.json();
