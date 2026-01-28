@@ -159,6 +159,23 @@ async function scrapeWithFirecrawl(baseUrl: string, sourceName: string, apiKey: 
 }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { timingSafeEqual } from 'node:crypto';
+
+// Timing-safe string comparison to prevent timing attacks
+function safeCompare(a: string, b: string): boolean {
+  try {
+    const bufA = new TextEncoder().encode(a);
+    const bufB = new TextEncoder().encode(b);
+    if (bufA.length !== bufB.length) {
+      // Still do comparison to maintain constant time
+      timingSafeEqual(bufA, bufA);
+      return false;
+    }
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -181,8 +198,8 @@ Deno.serve(async (req) => {
     
     const token = authHeader.replace('Bearer ', '');
     
-    // Check if using service role key (for cron jobs)
-    const isServiceRole = token === supabaseServiceKey;
+    // Check if using service role key (for cron jobs) - use timing-safe comparison
+    const isServiceRole = safeCompare(token, supabaseServiceKey);
     
     if (isServiceRole) {
       console.log('Authenticated via service role key (cron job)');
@@ -196,7 +213,7 @@ Deno.serve(async (req) => {
       
       if (claimsError || !claimsData?.claims) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Invalid or expired token' }),
+          JSON.stringify({ success: false, error: 'Unauthorized' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
