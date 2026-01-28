@@ -13,18 +13,18 @@ const KEYWORDS = [
   "investment round", "strategic investor", "financial sponsor"
 ];
 
-// News sources with their RSS/scrape endpoints
+// News sources configuration - Firecrawl primary, RSS fallback
 const NEWS_SOURCES = [
-  { name: 'TechCrunch', rssUrl: 'https://techcrunch.com/feed/', type: 'rss' },
-  { name: 'Crunchbase News', rssUrl: 'https://news.crunchbase.com/feed/', type: 'rss' },
-  { name: 'Moneycontrol', rssUrl: 'https://www.moneycontrol.com/rss/business.xml', type: 'rss' },
-  { name: 'LiveMint', rssUrl: 'https://www.livemint.com/rss/companies', type: 'rss' },
-  { name: 'ET', rssUrl: 'https://economictimes.indiatimes.com/rssfeedstopstories.cms', type: 'rss' },
-  { name: 'PR Newswire', rssUrl: 'https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss', type: 'rss' },
-  { name: 'BusinessWire', rssUrl: 'https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpRWQ==', type: 'rss' },
-  { name: 'VCCircle', baseUrl: 'https://www.vccircle.com', type: 'scrape' },
-  { name: 'DealStreetAsia', baseUrl: 'https://www.dealstreetasia.com', type: 'scrape' },
-  { name: 'PEI', baseUrl: 'https://www.privateequityinternational.com', type: 'scrape' },
+  { name: 'TechCrunch', url: 'https://techcrunch.com', rssUrl: 'https://techcrunch.com/feed/' },
+  { name: 'Crunchbase News', url: 'https://news.crunchbase.com', rssUrl: 'https://news.crunchbase.com/feed/' },
+  { name: 'Moneycontrol', url: 'https://www.moneycontrol.com/news/business', rssUrl: 'https://www.moneycontrol.com/rss/business.xml' },
+  { name: 'LiveMint', url: 'https://www.livemint.com/companies', rssUrl: 'https://www.livemint.com/rss/companies' },
+  { name: 'ET', url: 'https://economictimes.indiatimes.com', rssUrl: 'https://economictimes.indiatimes.com/rssfeedstopstories.cms' },
+  { name: 'PR Newswire', url: 'https://www.prnewswire.com/news-releases/financial-services-latest-news', rssUrl: 'https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss' },
+  { name: 'BusinessWire', url: 'https://www.businesswire.com/portal/site/home', rssUrl: 'https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpRWQ==' },
+  { name: 'VCCircle', url: 'https://www.vccircle.com', rssUrl: null },
+  { name: 'DealStreetAsia', url: 'https://www.dealstreetasia.com', rssUrl: null },
+  { name: 'PEI', url: 'https://www.privateequityinternational.com', rssUrl: null },
 ];
 
 interface NewsArticle {
@@ -36,7 +36,6 @@ interface NewsArticle {
 }
 
 function isEnglish(text: string): boolean {
-  // Simple check: if more than 80% ASCII characters, likely English
   const asciiCount = (text.match(/[\x00-\x7F]/g) || []).length;
   return asciiCount / text.length > 0.8;
 }
@@ -47,67 +46,47 @@ function matchesKeywords(text: string): boolean {
 }
 
 function isWithinDateRange(publishedAt: string | null, startDate: string, endDate: string): boolean {
-  if (!publishedAt) return true; // Include if no date
+  if (!publishedAt) return true;
   const pubDate = new Date(publishedAt);
   const start = new Date(startDate);
   const end = new Date(endDate);
-  end.setHours(23, 59, 59, 999); // Include entire end day
+  end.setHours(23, 59, 59, 999);
   return pubDate >= start && pubDate <= end;
 }
 
-async function parseRssFeed(rssUrl: string, sourceName: string): Promise<NewsArticle[]> {
+// Parse date from various formats found in scraped content
+function parseDate(dateStr: string | null | undefined): string | null {
+  if (!dateStr) return null;
   try {
-    console.log(`Fetching RSS from ${sourceName}: ${rssUrl}`);
-    const response = await fetch(rssUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' }
-    });
-    
-    if (!response.ok) {
-      console.error(`Failed to fetch RSS from ${sourceName}: ${response.status}`);
-      return [];
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString();
     }
-    
-    const xml = await response.text();
-    const articles: NewsArticle[] = [];
-    
-    // Simple XML parsing for RSS items
-    const itemMatches = xml.match(/<item[^>]*>[\s\S]*?<\/item>/gi) || [];
-    
-    for (const item of itemMatches.slice(0, 20)) { // Limit to 20 per source
-      const titleMatch = item.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
-      const linkMatch = item.match(/<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i);
-      const pubDateMatch = item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
-      const descMatch = item.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i);
-      
-      if (titleMatch && linkMatch) {
-        const headline = titleMatch[1].replace(/<[^>]+>/g, '').trim();
-        const url = linkMatch[1].replace(/<[^>]+>/g, '').trim();
-        const publishedAt = pubDateMatch ? new Date(pubDateMatch[1].trim()).toISOString() : null;
-        const body = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim().substring(0, 500) : null;
-        
-        if (headline && url) {
-          articles.push({
-            url,
-            source_name: sourceName,
-            published_at: publishedAt,
-            headline,
-            body_text: body,
-          });
-        }
+  } catch {
+    // Try common patterns
+    const patterns = [
+      /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i,
+      /(\d{4})-(\d{2})-(\d{2})/,
+    ];
+    for (const pattern of patterns) {
+      const match = dateStr.match(pattern);
+      if (match) {
+        try {
+          const parsed = new Date(match[0]);
+          if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString();
+          }
+        } catch {}
       }
     }
-    
-    console.log(`Parsed ${articles.length} articles from ${sourceName}`);
-    return articles;
-  } catch (error) {
-    console.error(`Error parsing RSS from ${sourceName}:`, error);
-    return [];
   }
+  return null;
 }
 
-async function scrapeWithFirecrawl(baseUrl: string, sourceName: string, apiKey: string): Promise<NewsArticle[]> {
+// Primary method: Firecrawl scraping
+async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: string): Promise<NewsArticle[]> {
   try {
-    console.log(`Scraping ${sourceName} via Firecrawl: ${baseUrl}`);
+    console.log(`[Firecrawl] Scraping ${source.name}: ${source.url}`);
     
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -116,56 +95,143 @@ async function scrapeWithFirecrawl(baseUrl: string, sourceName: string, apiKey: 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: baseUrl,
+        url: source.url,
         formats: ['markdown', 'links'],
         onlyMainContent: true,
       }),
     });
 
     if (!response.ok) {
-      console.error(`Firecrawl error for ${sourceName}: ${response.status}`);
+      console.error(`[Firecrawl] Error for ${source.name}: ${response.status}`);
       return [];
     }
 
     const data = await response.json();
     const articles: NewsArticle[] = [];
     
-    // Extract article links from the page
-    const links = data.data?.links || data.links || [];
     const markdown = data.data?.markdown || data.markdown || '';
+    const links = data.data?.links || data.links || [];
     
-    // Parse headlines from markdown content
-    const headlineMatches = markdown.match(/#{1,3}\s+([^\n]+)/g) || [];
+    // Extract headlines from markdown (h1, h2, h3 tags become # ## ### in markdown)
+    const headlineMatches = markdown.match(/^#{1,3}\s+([^\n]+)/gm) || [];
+    const cleanedHeadlines = headlineMatches.map((h: string) => h.replace(/^#{1,3}\s+/, '').trim());
     
-    for (let i = 0; i < Math.min(links.length, 10); i++) {
-      const link = links[i];
-      if (link && (link.includes('/news/') || link.includes('/article/') || link.includes('/story/'))) {
-        articles.push({
-          url: link,
-          source_name: sourceName,
-          published_at: null,
-          headline: headlineMatches[i]?.replace(/^#{1,3}\s+/, '') || `Article from ${sourceName}`,
-          body_text: null,
-        });
-      }
+    // Filter links that look like article URLs
+    const articleLinks = links.filter((link: string) => {
+      if (!link || typeof link !== 'string') return false;
+      const lowerLink = link.toLowerCase();
+      return (
+        lowerLink.includes('/news/') || 
+        lowerLink.includes('/article/') || 
+        lowerLink.includes('/story/') ||
+        lowerLink.includes('/post/') ||
+        lowerLink.includes('/20') // Year in URL like /2026/01/
+      ) && !lowerLink.includes('/tag/') && !lowerLink.includes('/category/');
+    });
+
+    // Create articles from scraped data
+    for (let i = 0; i < Math.min(articleLinks.length, 15); i++) {
+      const link = articleLinks[i];
+      const headline = cleanedHeadlines[i] || `Article from ${source.name}`;
+      
+      // Try to extract date from the link or use null
+      const dateMatch = link.match(/\/(\d{4})\/(\d{2})\/(\d{2})\//);
+      const publishedAt = dateMatch 
+        ? new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`).toISOString()
+        : null;
+      
+      articles.push({
+        url: link,
+        source_name: source.name,
+        published_at: publishedAt,
+        headline: headline.substring(0, 500),
+        body_text: null,
+      });
     }
     
-    console.log(`Scraped ${articles.length} articles from ${sourceName}`);
+    console.log(`[Firecrawl] Scraped ${articles.length} articles from ${source.name}`);
     return articles;
   } catch (error) {
-    console.error(`Error scraping ${sourceName}:`, error);
+    console.error(`[Firecrawl] Error scraping ${source.name}:`, error);
     return [];
   }
 }
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { crypto } from 'https://deno.land/std@0.208.0/crypto/mod.ts';
-
-// Timing-safe string comparison to prevent timing attacks
-function safeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
+// Fallback method: RSS parsing
+async function parseRssFeed(source: typeof NEWS_SOURCES[0]): Promise<NewsArticle[]> {
+  if (!source.rssUrl) {
+    console.log(`[RSS] No RSS feed available for ${source.name}`);
+    return [];
   }
+  
+  try {
+    console.log(`[RSS Fallback] Fetching ${source.name}: ${source.rssUrl}`);
+    const response = await fetch(source.rssUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' }
+    });
+    
+    if (!response.ok) {
+      console.error(`[RSS] Failed to fetch ${source.name}: ${response.status}`);
+      return [];
+    }
+    
+    const xml = await response.text();
+    const articles: NewsArticle[] = [];
+    
+    const itemMatches = xml.match(/<item[^>]*>[\s\S]*?<\/item>/gi) || [];
+    
+    for (const item of itemMatches.slice(0, 20)) {
+      const titleMatch = item.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+      const linkMatch = item.match(/<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i);
+      const pubDateMatch = item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
+      const descMatch = item.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i);
+      
+      if (titleMatch && linkMatch) {
+        const headline = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+        const url = linkMatch[1].replace(/<[^>]+>/g, '').trim();
+        const publishedAt = pubDateMatch ? parseDate(pubDateMatch[1].trim()) : null;
+        const body = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim().substring(0, 500) : null;
+        
+        if (headline && url) {
+          articles.push({
+            url,
+            source_name: source.name,
+            published_at: publishedAt,
+            headline,
+            body_text: body,
+          });
+        }
+      }
+    }
+    
+    console.log(`[RSS] Parsed ${articles.length} articles from ${source.name}`);
+    return articles;
+  } catch (error) {
+    console.error(`[RSS] Error parsing ${source.name}:`, error);
+    return [];
+  }
+}
+
+// Crawl a single source with Firecrawl primary, RSS fallback
+async function crawlSource(source: typeof NEWS_SOURCES[0], firecrawlApiKey: string | undefined): Promise<NewsArticle[]> {
+  // Try Firecrawl first if API key is available
+  if (firecrawlApiKey) {
+    const firecrawlArticles = await scrapeWithFirecrawl(source, firecrawlApiKey);
+    if (firecrawlArticles.length > 0) {
+      return firecrawlArticles;
+    }
+    console.log(`[Firecrawl] No articles found for ${source.name}, trying RSS fallback...`);
+  }
+  
+  // Fallback to RSS if Firecrawl fails or returns no results
+  return await parseRssFeed(source);
+}
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// Timing-safe string comparison
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
   const encoder = new TextEncoder();
   const bufA = encoder.encode(a);
   const bufB = encoder.encode(b);
@@ -183,8 +249,8 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
     
     // Check for service role key in Authorization header (for cron jobs)
     const authHeader = req.headers.get('Authorization');
@@ -194,13 +260,11 @@ Deno.serve(async (req) => {
     if (isServiceRole) {
       console.log('Authenticated via service role key (cron job)');
     } else {
-      // For regular requests, just log - no strict auth required for this dashboard
       console.log('Processing request with anon key');
     }
 
     const { startDate, endDate } = await req.json();
     
-    // Validate presence
     if (!startDate || !endDate) {
       return new Response(
         JSON.stringify({ success: false, error: 'startDate and endDate are required' }),
@@ -208,7 +272,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate date format and parse
     const start = new Date(startDate);
     const end = new Date(endDate);
     
@@ -219,7 +282,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate logical order
     if (start > end) {
       return new Response(
         JSON.stringify({ success: false, error: 'startDate must be before endDate' }),
@@ -227,7 +289,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate range (max 90 days to prevent resource abuse)
     const daysDiff = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
     if (daysDiff > 90) {
       return new Response(
@@ -236,42 +297,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate minimum date (January 2025)
-    const minDate = new Date('2025-01-01');
-    if (start < minDate) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'startDate cannot be before January 2025' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
-    
     console.log(`Starting crawl from ${startDate} to ${endDate}`);
+    console.log(`Firecrawl API key: ${firecrawlApiKey ? 'Available (primary)' : 'Not available (RSS only)'}`);
     
-    // Collect all articles from all sources
-    const allArticles: NewsArticle[] = [];
+    // Crawl all sources in parallel
+    const crawlPromises = NEWS_SOURCES.map(source => crawlSource(source, firecrawlApiKey));
+    const results = await Promise.all(crawlPromises);
     
-    // Process RSS sources in parallel
-    const rssPromises = NEWS_SOURCES
-      .filter(s => s.type === 'rss')
-      .map(source => parseRssFeed(source.rssUrl!, source.name));
-    
-    const rssResults = await Promise.all(rssPromises);
-    rssResults.forEach(articles => allArticles.push(...articles));
-    
-    // Process scrape sources if Firecrawl is available
-    if (firecrawlApiKey) {
-      const scrapePromises = NEWS_SOURCES
-        .filter(s => s.type === 'scrape')
-        .map(source => scrapeWithFirecrawl(source.baseUrl!, source.name, firecrawlApiKey));
-      
-      const scrapeResults = await Promise.all(scrapePromises);
-      scrapeResults.forEach(articles => allArticles.push(...articles));
-    } else {
-      console.log('Firecrawl API key not found, skipping scrape sources');
-    }
-    
+    const allArticles = results.flat();
     console.log(`Total articles collected: ${allArticles.length}`);
     
     // Filter by date range
@@ -310,11 +343,11 @@ Deno.serve(async (req) => {
     
     console.log(`News raw (matching): ${newsRaw.length}, To process (non-matching): ${newsToProcess.length}`);
     
-    // Insert into Supabase using REST API
+    // Insert into Supabase
     const insertResults = { newsRaw: 0, newsToProcess: 0, errors: [] as string[] };
     
     if (newsRaw.length > 0) {
-      const response = await fetch(`${supabaseUrl}/rest/v1/news_raw`, {
+      const response = await fetch(`${supabaseUrl}/rest/v1/news_raw?on_conflict=url`, {
         method: 'POST',
         headers: {
           'apikey': supabaseServiceKey,
@@ -335,7 +368,7 @@ Deno.serve(async (req) => {
     }
     
     if (newsToProcess.length > 0) {
-      const response = await fetch(`${supabaseUrl}/rest/v1/news_to_process`, {
+      const response = await fetch(`${supabaseUrl}/rest/v1/news_to_process?on_conflict=source_url`, {
         method: 'POST',
         headers: {
           'apikey': supabaseServiceKey,
@@ -358,7 +391,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Crawled ${allArticles.length} articles`,
+        message: `Crawled ${allArticles.length} articles (Firecrawl: ${firecrawlApiKey ? 'primary' : 'unavailable'})`,
         inserted: insertResults,
         stats: {
           total: allArticles.length,
