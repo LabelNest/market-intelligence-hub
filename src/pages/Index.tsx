@@ -14,8 +14,8 @@ import { toast } from 'sonner';
 
 const Index = () => {
   const [filters, setFilters] = useState<FiltersType>({});
-  const [startDate, setStartDate] = useState<Date | undefined>(new Date(2025, 0, 1));
-  const [endDate, setEndDate] = useState<Date | undefined>(new Date(2025, 0, 15));
+  const [startDate, setStartDate] = useState<Date | undefined>(subDays(new Date(), 2));
+  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [resummarizingId, setResummarizingId] = useState<string | null>(null);
