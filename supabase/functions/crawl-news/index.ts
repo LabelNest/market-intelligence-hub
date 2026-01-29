@@ -3,14 +3,53 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Private market keywords for filtering
+// Private market keywords for filtering - expanded list
 const KEYWORDS = [
+  // Core PE/VC terms
   "private equity", "venture capital", "VC fund", "PE fund", "growth equity",
-  "series A", "series B", "series C", "seed round", "angel investment",
-  "fundraise", "capital raised", "acquisition", "merger", "buyout",
-  "minority stake", "majority stake", "portfolio company", "investment firm",
-  "fund manager", "limited partner", "general partner", "private markets",
-  "investment round", "strategic investor", "financial sponsor"
+  "private credit", "private debt", "mezzanine financing", "leveraged buyout", "LBO",
+  "management buyout", "MBO", "secondary buyout", "carve-out", "spin-off",
+  
+  // Funding rounds
+  "series A", "series B", "series C", "series D", "series E", "series F",
+  "seed round", "seed funding", "pre-seed", "angel investment", "angel round",
+  "bridge round", "bridge financing", "extension round", "pre-IPO", "late-stage",
+  "early-stage", "growth stage", "mega round",
+  
+  // Deal activity
+  "fundraise", "fundraising", "capital raised", "raises funding", "raised funding",
+  "secures funding", "closes funding", "funding round", "investment round",
+  "acquisition", "acquires", "acquired", "merger", "M&A", "buyout",
+  "takeover", "deal value", "deal size", "transaction value",
+  
+  // Stake and ownership
+  "minority stake", "majority stake", "controlling stake", "equity stake",
+  "strategic stake", "stake acquisition", "stake sale", "exits", "exit",
+  "divestiture", "divestment", "partial sale",
+  
+  // Market participants
+  "portfolio company", "investment firm", "asset manager", "fund manager",
+  "limited partner", "LP", "general partner", "GP", "institutional investor",
+  "strategic investor", "financial sponsor", "sovereign wealth fund", "SWF",
+  "family office", "pension fund", "endowment", "hedge fund",
+  
+  // Fund terms
+  "private markets", "alternative assets", "alternatives", "AUM", "assets under management",
+  "fund closing", "first close", "final close", "fund size", "dry powder",
+  "committed capital", "capital call", "distribution", "carried interest",
+  "management fee", "hurdle rate", "IRR", "internal rate of return", "MOIC",
+  
+  // Valuation and metrics
+  "valuation", "pre-money", "post-money", "unicorn", "decacorn",
+  "down round", "up round", "flat round", "markup", "write-down",
+  
+  // Sectors commonly covered
+  "fintech", "healthtech", "edtech", "proptech", "insurtech", "agritech",
+  "cleantech", "deeptech", "biotech", "medtech", "SaaS", "enterprise software",
+  
+  // Geographic terms often in headlines
+  "India startup", "Southeast Asia", "MENA", "emerging markets",
+  "cross-border", "global fund", "regional fund"
 ];
 
 // News sources configuration - Firecrawl primary, RSS fallback
