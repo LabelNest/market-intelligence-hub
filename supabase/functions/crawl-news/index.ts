@@ -52,18 +52,68 @@ const KEYWORDS = [
   "cross-border", "global fund", "regional fund"
 ];
 
-// News sources configuration - Firecrawl primary, RSS fallback
+// News sources configuration - optimized URLs for article discovery
 const NEWS_SOURCES = [
-  { name: 'TechCrunch', url: 'https://techcrunch.com', rssUrl: 'https://techcrunch.com/feed/' },
-  { name: 'Crunchbase News', url: 'https://news.crunchbase.com', rssUrl: 'https://news.crunchbase.com/feed/' },
-  { name: 'Moneycontrol', url: 'https://www.moneycontrol.com/news/business', rssUrl: 'https://www.moneycontrol.com/rss/business.xml' },
-  { name: 'LiveMint', url: 'https://www.livemint.com/companies', rssUrl: 'https://www.livemint.com/rss/companies' },
-  { name: 'ET', url: 'https://economictimes.indiatimes.com', rssUrl: 'https://economictimes.indiatimes.com/rssfeedstopstories.cms' },
-  { name: 'PR Newswire', url: 'https://www.prnewswire.com/news-releases/financial-services-latest-news', rssUrl: 'https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss' },
-  { name: 'BusinessWire', url: 'https://www.businesswire.com/portal/site/home', rssUrl: 'https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpRWQ==' },
-  { name: 'VCCircle', url: 'https://www.vccircle.com', rssUrl: null },
-  { name: 'DealStreetAsia', url: 'https://www.dealstreetasia.com', rssUrl: null },
-  { name: 'PEI', url: 'https://www.privateequityinternational.com', rssUrl: null },
+  { 
+    name: 'TechCrunch', 
+    url: 'https://techcrunch.com/category/venture/', 
+    rssUrl: 'https://techcrunch.com/feed/',
+    urlPatterns: ['/20', '/venture/', '/startups/']
+  },
+  { 
+    name: 'Crunchbase News', 
+    url: 'https://news.crunchbase.com/venture/', 
+    rssUrl: 'https://news.crunchbase.com/feed/',
+    urlPatterns: ['/venture/', '/ma/', '/fintech/', '/news/']
+  },
+  { 
+    name: 'Moneycontrol', 
+    url: 'https://www.moneycontrol.com/news/business/companies/', 
+    rssUrl: 'https://www.moneycontrol.com/rss/business.xml',
+    urlPatterns: ['/news/', '/article-']
+  },
+  { 
+    name: 'LiveMint', 
+    url: 'https://www.livemint.com/companies/start-ups', 
+    rssUrl: 'https://www.livemint.com/rss/companies',
+    urlPatterns: ['/companies/', '/market/', '/money/']
+  },
+  { 
+    name: 'ET', 
+    url: 'https://economictimes.indiatimes.com/tech/startups', 
+    rssUrl: 'https://economictimes.indiatimes.com/rssfeedstopstories.cms',
+    urlPatterns: ['/articleshow/', '/tech/startups/', '/small-biz/']
+  },
+  { 
+    name: 'PR Newswire', 
+    url: 'https://www.prnewswire.com/news-releases/financial-services-latest-news/', 
+    rssUrl: 'https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss',
+    urlPatterns: ['/news-releases/']
+  },
+  { 
+    name: 'GlobeNewswire', 
+    url: 'https://www.globenewswire.com/en/search/tag/Private%20Equity', 
+    rssUrl: null,
+    urlPatterns: ['/news-release/', 'globenewswire.com']
+  },
+  { 
+    name: 'VCCircle', 
+    url: 'https://www.vccircle.com/', 
+    rssUrl: null, // VCCircle doesn't have public RSS
+    urlPatterns: ['/vccircle.com/', '-funding', '-invest', '-acquisition', '-raises']
+  },
+  { 
+    name: 'DealStreetAsia', 
+    url: 'https://www.dealstreetasia.com/stories', 
+    rssUrl: 'https://www.dealstreetasia.com/feed/',
+    urlPatterns: ['/stories/', '/partner-content/']
+  },
+  { 
+    name: 'PEI', 
+    url: 'https://www.privateequityinternational.com/news/', 
+    rssUrl: 'https://www.privateequityinternational.com/feed/',
+    urlPatterns: ['/news/', '/analysis/']
+  },
 ];
 
 interface NewsArticle {
@@ -122,7 +172,7 @@ function parseDate(dateStr: string | null | undefined): string | null {
   return null;
 }
 
-// Primary method: Firecrawl scraping
+// Primary method: Firecrawl scraping with improved extraction
 async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: string): Promise<NewsArticle[]> {
   try {
     console.log(`[Firecrawl] Scraping ${source.name}: ${source.url}`);
@@ -137,11 +187,13 @@ async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: strin
         url: source.url,
         formats: ['markdown', 'links'],
         onlyMainContent: true,
+        waitFor: 2000, // Wait for dynamic content
       }),
     });
 
     if (!response.ok) {
-      console.error(`[Firecrawl] Error for ${source.name}: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`[Firecrawl] Error for ${source.name}: ${response.status} - ${errorText}`);
       return [];
     }
 
@@ -151,40 +203,111 @@ async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: strin
     const markdown = data.data?.markdown || data.markdown || '';
     const links = data.data?.links || data.links || [];
     
-    // Extract headlines from markdown (h1, h2, h3 tags become # ## ### in markdown)
-    const headlineMatches = markdown.match(/^#{1,3}\s+([^\n]+)/gm) || [];
-    const cleanedHeadlines = headlineMatches.map((h: string) => h.replace(/^#{1,3}\s+/, '').trim());
+    // Extract headlines and their content from markdown
+    // Match headlines (# ## ###) followed by their content until the next headline or end
+    const sections = markdown.split(/(?=^#{1,3}\s+)/gm).filter((s: string) => s.trim());
+    const headlineContentPairs: { headline: string; content: string }[] = [];
     
-    // Filter links that look like article URLs
+    for (const section of sections) {
+      const headlineMatch = section.match(/^#{1,3}\s+([^\n]+)/);
+      if (headlineMatch) {
+        const headline = headlineMatch[1].trim();
+        // Get content after headline (first 300 chars for keyword matching)
+        const content = section.replace(/^#{1,3}\s+[^\n]+\n?/, '').trim().substring(0, 300);
+        headlineContentPairs.push({ headline, content });
+      }
+    }
+    
+    // Filter links using source-specific patterns
     const articleLinks = links.filter((link: string) => {
       if (!link || typeof link !== 'string') return false;
       const lowerLink = link.toLowerCase();
-      return (
-        lowerLink.includes('/news/') || 
-        lowerLink.includes('/article/') || 
-        lowerLink.includes('/story/') ||
-        lowerLink.includes('/post/') ||
-        lowerLink.includes('/20') // Year in URL like /2026/01/
-      ) && !lowerLink.includes('/tag/') && !lowerLink.includes('/category/');
+      
+      // Check source-specific patterns
+      const matchesPattern = source.urlPatterns.some(pattern => 
+        lowerLink.includes(pattern.toLowerCase())
+      );
+      
+      // Exclude common non-article patterns
+      const isExcluded = (
+        lowerLink.includes('/tag/') || 
+        lowerLink.includes('/category/') ||
+        lowerLink.includes('/author/') ||
+        lowerLink.includes('/page/') ||
+        lowerLink.includes('#') ||
+        lowerLink.includes('/search') ||
+        lowerLink.includes('/login') ||
+        lowerLink.includes('/register') ||
+        lowerLink.endsWith('.jpg') ||
+        lowerLink.endsWith('.png') ||
+        lowerLink.endsWith('.pdf')
+      );
+      
+      return matchesPattern && !isExcluded;
     });
 
+    // Deduplicate links and ensure they are strings
+    const uniqueLinks: string[] = [...new Set(articleLinks as string[])];
+    
+    console.log(`[Firecrawl] Found ${uniqueLinks.length} article links from ${source.name}`);
+
     // Create articles from scraped data
-    for (let i = 0; i < Math.min(articleLinks.length, 15); i++) {
-      const link = articleLinks[i];
-      const headline = cleanedHeadlines[i] || `Article from ${source.name}`;
+    for (let i = 0; i < Math.min(uniqueLinks.length, 25); i++) {
+      const link: string = uniqueLinks[i];
       
-      // Try to extract date from the link or use null
-      const dateMatch = link.match(/\/(\d{4})\/(\d{2})\/(\d{2})\//);
+      // Try to match headline to link or use extracted content
+      let headline = '';
+      let bodyText = '';
+      
+      // Find headline that might match this link (check if link contains words from headline)
+      for (const pair of headlineContentPairs) {
+        const headlineWords = pair.headline.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+        const linkLower = link.toLowerCase();
+        const matchCount = headlineWords.filter(word => linkLower.includes(word)).length;
+        if (matchCount >= 2 || (headlineWords.length <= 3 && matchCount >= 1)) {
+          headline = pair.headline;
+          bodyText = pair.content;
+          break;
+        }
+      }
+      
+      // If no match found, try to use positional matching or extract from link
+      if (!headline) {
+        if (headlineContentPairs[i]) {
+          headline = headlineContentPairs[i].headline;
+          bodyText = headlineContentPairs[i].content;
+        } else {
+          // Extract headline from URL path
+          const urlPath = new URL(link).pathname;
+          const slugMatch = urlPath.match(/\/([^\/]+)\/?$/);
+          if (slugMatch) {
+            headline = slugMatch[1]
+              .replace(/-/g, ' ')
+              .replace(/\d+/g, '')
+              .trim()
+              .split(' ')
+              .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ');
+          }
+        }
+      }
+      
+      if (!headline || headline.length < 10) {
+        headline = `Article from ${source.name}`;
+      }
+      
+      // Try to extract date from the link
+      const dateMatch = link.match(/\/(\d{4})[-\/](\d{2})[-\/](\d{2})/);
       const publishedAt = dateMatch 
         ? new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`).toISOString()
-        : null;
+        : new Date().toISOString(); // Use current date if not found
       
       articles.push({
         url: link,
         source_name: source.name,
         published_at: publishedAt,
         headline: headline.substring(0, 500),
-        body_text: null,
+        body_text: bodyText || null,
       });
     }
     
