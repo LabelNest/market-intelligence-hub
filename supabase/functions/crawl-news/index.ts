@@ -172,11 +172,94 @@ function parseDate(dateStr: string | null | undefined): string | null {
   return null;
 }
 
-// Primary method: Firecrawl scraping with improved extraction
+// Scrape individual article page to get proper headline and body
+async function scrapeArticlePage(url: string, sourceName: string, apiKey: string): Promise<NewsArticle | null> {
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+        onlyMainContent: true,
+        waitFor: 1500,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const markdown = data.data?.markdown || data.markdown || '';
+    const metadata = data.data?.metadata || data.metadata || {};
+    
+    // Extract headline from metadata title or first markdown heading
+    let headline = metadata.title || '';
+    if (!headline || headline.length < 10) {
+      const headlineMatch = markdown.match(/^#{1,2}\s+([^\n]+)/m);
+      if (headlineMatch) {
+        headline = headlineMatch[1].trim();
+      }
+    }
+    
+    // Clean up headline - remove site name suffixes
+    headline = headline
+      .replace(/\s*[\|\-–—]\s*(TechCrunch|Crunchbase|Moneycontrol|LiveMint|ET|PR Newswire|GlobeNewswire|VCCircle|DealStreetAsia|PEI).*$/i, '')
+      .replace(/\s*[\|\-–—]\s*News$/i, '')
+      .trim();
+    
+    // Extract body text - first 2-3 paragraphs (500 chars)
+    const bodyContent = markdown
+      .replace(/^#{1,6}\s+[^\n]+\n?/gm, '') // Remove headings
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert links to text
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, '') // Remove images
+      .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+      .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+      .replace(/^\s*[-*•]\s+/gm, '') // Remove list markers
+      .replace(/\n{3,}/g, '\n\n') // Normalize newlines
+      .trim();
+    
+    const bodyText = bodyContent.substring(0, 500);
+    
+    // Extract date from metadata or content
+    let publishedAt = metadata.publishedTime || metadata.datePublished || null;
+    if (!publishedAt) {
+      const dateMatch = url.match(/\/(\d{4})[-\/](\d{2})[-\/](\d{2})/);
+      if (dateMatch) {
+        publishedAt = new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`).toISOString();
+      }
+    }
+    if (!publishedAt) {
+      publishedAt = new Date().toISOString();
+    }
+    
+    if (!headline || headline.length < 10) {
+      return null;
+    }
+    
+    return {
+      url,
+      source_name: sourceName,
+      published_at: publishedAt,
+      headline: headline.substring(0, 500),
+      body_text: bodyText || null,
+    };
+  } catch (error) {
+    console.error(`Error scraping article ${url}:`, error);
+    return null;
+  }
+}
+
+// Primary method: Firecrawl scraping - get links first, then scrape each article
 async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: string): Promise<NewsArticle[]> {
   try {
     console.log(`[Firecrawl] Scraping ${source.name}: ${source.url}`);
     
+    // First, get the list page to find article links
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -185,9 +268,9 @@ async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: strin
       },
       body: JSON.stringify({
         url: source.url,
-        formats: ['markdown', 'links'],
+        formats: ['links'],
         onlyMainContent: true,
-        waitFor: 2000, // Wait for dynamic content
+        waitFor: 2000,
       }),
     });
 
@@ -198,37 +281,17 @@ async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: strin
     }
 
     const data = await response.json();
-    const articles: NewsArticle[] = [];
-    
-    const markdown = data.data?.markdown || data.markdown || '';
     const links = data.data?.links || data.links || [];
-    
-    // Extract headlines and their content from markdown
-    // Match headlines (# ## ###) followed by their content until the next headline or end
-    const sections = markdown.split(/(?=^#{1,3}\s+)/gm).filter((s: string) => s.trim());
-    const headlineContentPairs: { headline: string; content: string }[] = [];
-    
-    for (const section of sections) {
-      const headlineMatch = section.match(/^#{1,3}\s+([^\n]+)/);
-      if (headlineMatch) {
-        const headline = headlineMatch[1].trim();
-        // Get content after headline (first 300 chars for keyword matching)
-        const content = section.replace(/^#{1,3}\s+[^\n]+\n?/, '').trim().substring(0, 300);
-        headlineContentPairs.push({ headline, content });
-      }
-    }
     
     // Filter links using source-specific patterns
     const articleLinks = links.filter((link: string) => {
       if (!link || typeof link !== 'string') return false;
       const lowerLink = link.toLowerCase();
       
-      // Check source-specific patterns
       const matchesPattern = source.urlPatterns.some(pattern => 
         lowerLink.includes(pattern.toLowerCase())
       );
       
-      // Exclude common non-article patterns
       const isExcluded = (
         lowerLink.includes('/tag/') || 
         lowerLink.includes('/category/') ||
@@ -246,72 +309,33 @@ async function scrapeWithFirecrawl(source: typeof NEWS_SOURCES[0], apiKey: strin
       return matchesPattern && !isExcluded;
     });
 
-    // Deduplicate links and ensure they are strings
     const uniqueLinks: string[] = [...new Set(articleLinks as string[])];
-    
     console.log(`[Firecrawl] Found ${uniqueLinks.length} article links from ${source.name}`);
 
-    // Create articles from scraped data
-    for (let i = 0; i < Math.min(uniqueLinks.length, 25); i++) {
-      const link: string = uniqueLinks[i];
+    // Scrape individual articles (limit to 15 per source to avoid rate limits)
+    const articlesToScrape = uniqueLinks.slice(0, 15);
+    const articles: NewsArticle[] = [];
+    
+    // Scrape in batches of 5 to avoid overwhelming the API
+    for (let i = 0; i < articlesToScrape.length; i += 5) {
+      const batch = articlesToScrape.slice(i, i + 5);
+      const batchResults = await Promise.all(
+        batch.map(url => scrapeArticlePage(url, source.name, apiKey))
+      );
       
-      // Try to match headline to link or use extracted content
-      let headline = '';
-      let bodyText = '';
-      
-      // Find headline that might match this link (check if link contains words from headline)
-      for (const pair of headlineContentPairs) {
-        const headlineWords = pair.headline.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-        const linkLower = link.toLowerCase();
-        const matchCount = headlineWords.filter(word => linkLower.includes(word)).length;
-        if (matchCount >= 2 || (headlineWords.length <= 3 && matchCount >= 1)) {
-          headline = pair.headline;
-          bodyText = pair.content;
-          break;
+      for (const article of batchResults) {
+        if (article) {
+          articles.push(article);
         }
       }
       
-      // If no match found, try to use positional matching or extract from link
-      if (!headline) {
-        if (headlineContentPairs[i]) {
-          headline = headlineContentPairs[i].headline;
-          bodyText = headlineContentPairs[i].content;
-        } else {
-          // Extract headline from URL path
-          const urlPath = new URL(link).pathname;
-          const slugMatch = urlPath.match(/\/([^\/]+)\/?$/);
-          if (slugMatch) {
-            headline = slugMatch[1]
-              .replace(/-/g, ' ')
-              .replace(/\d+/g, '')
-              .trim()
-              .split(' ')
-              .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-              .join(' ');
-          }
-        }
+      // Small delay between batches
+      if (i + 5 < articlesToScrape.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-      
-      if (!headline || headline.length < 10) {
-        headline = `Article from ${source.name}`;
-      }
-      
-      // Try to extract date from the link
-      const dateMatch = link.match(/\/(\d{4})[-\/](\d{2})[-\/](\d{2})/);
-      const publishedAt = dateMatch 
-        ? new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`).toISOString()
-        : new Date().toISOString(); // Use current date if not found
-      
-      articles.push({
-        url: link,
-        source_name: source.name,
-        published_at: publishedAt,
-        headline: headline.substring(0, 500),
-        body_text: bodyText || null,
-      });
     }
     
-    console.log(`[Firecrawl] Scraped ${articles.length} articles from ${source.name}`);
+    console.log(`[Firecrawl] Scraped ${articles.length} articles with full content from ${source.name}`);
     return articles;
   } catch (error) {
     console.error(`[Firecrawl] Error scraping ${source.name}:`, error);
