@@ -3,11 +3,15 @@ import { ExternalLink, Sparkles, Clock, CheckCircle2, AlertCircle, Loader2 } fro
 import { NewsItem } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
 interface NewsCardProps {
   item: NewsItem;
   onClick?: () => void;
+  isSelected?: boolean;
+  onSelectChange?: (selected: boolean) => void;
+  showSelection?: boolean;
 }
 
 const statusConfig: Record<string, { icon: React.ElementType; className: string }> = {
@@ -17,13 +21,16 @@ const statusConfig: Record<string, { icon: React.ElementType; className: string 
   failed: { icon: AlertCircle, className: 'bg-destructive/10 text-destructive border-destructive/20' },
 };
 
-export function NewsCard({ item, onClick }: NewsCardProps) {
+export function NewsCard({ item, onClick, isSelected, onSelectChange, showSelection }: NewsCardProps) {
   const status = statusConfig[item.status] || statusConfig.pending;
   const StatusIcon = status.icon;
 
   return (
     <div
-      className="group rounded-xl border bg-card p-5 shadow-card transition-all duration-300 hover:shadow-lg hover:border-primary/30 animate-fade-in cursor-pointer"
+      className={cn(
+        "group rounded-xl border bg-card p-5 shadow-card transition-all duration-300 hover:shadow-lg hover:border-primary/30 animate-fade-in cursor-pointer",
+        isSelected && "ring-2 ring-primary border-primary/50"
+      )}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -31,9 +38,19 @@ export function NewsCard({ item, onClick }: NewsCardProps) {
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
-        <Badge variant="secondary" className="font-medium shrink-0">
-          {item.source}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {showSelection && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => onSelectChange?.(checked === true)}
+              onClick={(e) => e.stopPropagation()}
+              className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+          )}
+          <Badge variant="secondary" className="font-medium shrink-0">
+            {item.source}
+          </Badge>
+        </div>
         <Badge className={cn('border font-normal shrink-0', status.className)}>
           <StatusIcon className={cn('h-3 w-3 mr-1', item.status === 'processing' && 'animate-spin')} />
           {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
@@ -108,9 +125,29 @@ interface NewsCardsGridProps {
   items: NewsItem[];
   isLoading?: boolean;
   onArticleClick?: (item: NewsItem) => void;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+  showSelection?: boolean;
 }
 
-export function NewsCardsGrid({ items, isLoading, onArticleClick }: NewsCardsGridProps) {
+export function NewsCardsGrid({ 
+  items, 
+  isLoading, 
+  onArticleClick, 
+  selectedIds = new Set(), 
+  onSelectionChange,
+  showSelection = false 
+}: NewsCardsGridProps) {
+  const handleSelectChange = (id: string, selected: boolean) => {
+    const newSelection = new Set(selectedIds);
+    if (selected) {
+      newSelection.add(id);
+    } else {
+      newSelection.delete(id);
+    }
+    onSelectionChange?.(newSelection);
+  };
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -144,7 +181,14 @@ export function NewsCardsGrid({ items, isLoading, onArticleClick }: NewsCardsGri
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {items.map((item) => (
-        <NewsCard key={item.id} item={item} onClick={() => onArticleClick?.(item)} />
+        <NewsCard 
+          key={item.id} 
+          item={item} 
+          onClick={() => onArticleClick?.(item)}
+          isSelected={selectedIds.has(item.id)}
+          onSelectChange={(selected) => handleSelectChange(item.id, selected)}
+          showSelection={showSelection}
+        />
       ))}
     </div>
   );

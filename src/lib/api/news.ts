@@ -42,6 +42,16 @@ export interface SummarizeResponse {
   failed?: number;
 }
 
+export interface DeepScrapeResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  stats?: {
+    success: number;
+    failed: number;
+  };
+}
+
 export const newsApi = {
   // Fetch all news_raw articles
   async fetchNewsRaw(options?: {
@@ -179,6 +189,20 @@ export const newsApi = {
     }
 
     return data as SummarizeResponse;
+  },
+
+  // Deep scrape selected articles for full content
+  async deepScrapeArticles(articleIds: string[]): Promise<DeepScrapeResponse> {
+    const { data, error } = await supabase.functions.invoke('deep-scrape', {
+      body: { articleIds },
+    });
+
+    if (error) {
+      console.error('Error deep scraping:', error);
+      return { success: false, error: error.message };
+    }
+
+    return data as DeepScrapeResponse;
   },
 
   // Export to CSV

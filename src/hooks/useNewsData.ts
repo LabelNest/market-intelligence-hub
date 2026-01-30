@@ -83,6 +83,22 @@ export function useNewsData(filters: NewsFilters = {}) {
     },
   });
 
+  // Deep scrape mutation
+  const deepScrapeMutation = useMutation({
+    mutationFn: (articleIds: string[]) => newsApi.deepScrapeArticles(articleIds),
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message || 'Deep scrape completed');
+        queryClient.invalidateQueries({ queryKey: ['news_raw'] });
+      } else {
+        toast.error(data.error || 'Deep scrape failed');
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Deep scrape failed: ${error.message}`);
+    },
+  });
+
   const refreshAll = useCallback(() => {
     refetchNews();
     refetchToProcess();
@@ -120,8 +136,10 @@ export function useNewsData(filters: NewsFilters = {}) {
     isLoading: isLoadingNews || isLoadingToProcess || isLoadingStats,
     isCrawling: crawlMutation.isPending,
     isSummarizing: summarizeMutation.isPending,
+    isDeepScraping: deepScrapeMutation.isPending,
     crawlNews: crawlMutation.mutate,
     summarizeNews: summarizeMutation.mutate,
+    deepScrapeArticles: deepScrapeMutation.mutate,
     refreshAll,
     exportNewsRaw,
     exportNewsToProcess,
