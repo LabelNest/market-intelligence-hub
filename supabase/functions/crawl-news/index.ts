@@ -223,14 +223,22 @@ async function scrapeArticlePage(url: string, sourceName: string, apiKey: string
       .replace(/\n{3,}/g, '\n\n') // Normalize newlines
       .trim();
     
-    // Split into paragraphs/lines and extract 2nd and 3rd
+    // Split into paragraphs/lines and extract 2nd and 3rd LAST paragraphs
     const paragraphs = cleanedMarkdown
       .split(/\n\n+/)
       .map((p: string) => p.replace(/\n/g, ' ').trim())
       .filter((p: string) => p.length > 20); // Filter out short lines (dates, bylines, etc.)
     
-    // Skip first paragraph (often byline/date/metadata), take 2nd and 3rd
-    const relevantParagraphs = paragraphs.slice(1, 3);
+    // Get 2nd and 3rd last paragraphs (skip the very last which is often footer/related content)
+    const totalParagraphs = paragraphs.length;
+    let relevantParagraphs: string[] = [];
+    if (totalParagraphs >= 3) {
+      relevantParagraphs = paragraphs.slice(-3, -1); // 3rd last and 2nd last
+    } else if (totalParagraphs === 2) {
+      relevantParagraphs = paragraphs.slice(0, 2); // Take both if only 2
+    } else if (totalParagraphs === 1) {
+      relevantParagraphs = paragraphs; // Take the only one
+    }
     const bodyText = relevantParagraphs.join(' ').substring(0, 500);
     
     // Extract date from metadata or content
