@@ -212,8 +212,8 @@ async function scrapeArticlePage(url: string, sourceName: string, apiKey: string
       .replace(/\s*[\|\-–—]\s*News$/i, '')
       .trim();
     
-    // Extract body text - first 2-3 paragraphs (500 chars)
-    const bodyContent = markdown
+    // Extract body text - 2nd and 3rd lines/paragraphs (skip first line which is often metadata/byline)
+    const cleanedMarkdown = markdown
       .replace(/^#{1,6}\s+[^\n]+\n?/gm, '') // Remove headings
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert links to text
       .replace(/!\[[^\]]*\]\([^)]+\)/g, '') // Remove images
@@ -223,7 +223,15 @@ async function scrapeArticlePage(url: string, sourceName: string, apiKey: string
       .replace(/\n{3,}/g, '\n\n') // Normalize newlines
       .trim();
     
-    const bodyText = bodyContent.substring(0, 500);
+    // Split into paragraphs/lines and extract 2nd and 3rd
+    const paragraphs = cleanedMarkdown
+      .split(/\n\n+/)
+      .map((p: string) => p.replace(/\n/g, ' ').trim())
+      .filter((p: string) => p.length > 20); // Filter out short lines (dates, bylines, etc.)
+    
+    // Skip first paragraph (often byline/date/metadata), take 2nd and 3rd
+    const relevantParagraphs = paragraphs.slice(1, 3);
+    const bodyText = relevantParagraphs.join(' ').substring(0, 500);
     
     // Extract date from metadata or content
     let publishedAt = metadata.publishedTime || metadata.datePublished || null;
