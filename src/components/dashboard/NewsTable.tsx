@@ -17,6 +17,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 interface NewsTableProps {
@@ -38,16 +44,34 @@ function NewsRow({ item }: { item: NewsItem }) {
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <TableRow className="group transition-colors hover:bg-muted/50">
         <TableCell className="max-w-md">
-          <CollapsibleTrigger asChild>
-            <button className="flex items-start gap-2 text-left">
-              <span className="mt-1 text-muted-foreground transition-transform duration-200">
-                {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </span>
-              <span className="font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-                {item.title}
-              </span>
-            </button>
-          </CollapsibleTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-start gap-2 text-left">
+                  <span className="mt-1 text-muted-foreground transition-transform duration-200">
+                    {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </span>
+                  <span className="font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+                    {item.title}
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+            </TooltipTrigger>
+            {item.content && (
+              <TooltipContent 
+                side="bottom" 
+                align="start" 
+                className="max-w-md p-4 bg-popover border border-border shadow-lg"
+              >
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-primary uppercase tracking-wide">Body Preview</p>
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {item.content}
+                  </p>
+                </div>
+              </TooltipContent>
+            )}
+          </Tooltip>
         </TableCell>
         <TableCell>
           <Badge variant="secondary" className="font-normal">
@@ -136,29 +160,31 @@ export function NewsTable({ items, isLoading }: NewsTableProps) {
   }
 
   return (
-    <div className="rounded-xl border bg-card shadow-card overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="w-[40%]">Headline</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Published</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Keywords</TableHead>
-            <TableHead className="w-[60px]">Link</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((item) => (
-            <NewsRow key={item.id} item={item} />
-          ))}
-        </TableBody>
-      </Table>
-      {items.length === 0 && (
-        <div className="p-8 text-center text-muted-foreground">
-          No news items found
-        </div>
-      )}
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="rounded-xl border bg-card shadow-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-[40%]">Headline</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Published</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Keywords</TableHead>
+              <TableHead className="w-[60px]">Link</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => (
+              <NewsRow key={item.id} item={item} />
+            ))}
+          </TableBody>
+        </Table>
+        {items.length === 0 && (
+          <div className="p-8 text-center text-muted-foreground">
+            No news items found
+          </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
