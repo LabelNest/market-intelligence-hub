@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
-import { FileText, CheckCircle2, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, TrendingUp, AlertTriangle, Zap, X } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Header } from '@/components/dashboard/Header';
 import { StatsCard } from '@/components/dashboard/StatsCard';
@@ -10,6 +10,7 @@ import { SourceBarChart } from '@/components/dashboard/SourceBarChart';
 import { KeywordCloud } from '@/components/dashboard/KeywordCloud';
 import { useNewsData, NewsFilters as FiltersType } from '@/hooks/useNewsData';
 import { NewsItem } from '@/lib/types';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 const Index = () => {
@@ -19,6 +20,8 @@ const Index = () => {
   const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [resummarizingId, setResummarizingId] = useState<string | null>(null);
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
+  const [isSelectMode, setIsSelectMode] = useState(false);
 
   const {
     newsRaw,
@@ -27,8 +30,10 @@ const Index = () => {
     isLoading,
     isCrawling,
     isSummarizing,
+    isDeepScraping,
     crawlNews,
     summarizeNews,
+    deepScrapeArticles,
     refreshAll,
     exportNewsRaw,
     exportNewsToProcess,
@@ -79,6 +84,33 @@ const Index = () => {
     setResummarizingId(articleId);
     summarizeNews([articleId]);
   }, [summarizeNews]);
+
+  const handleDeepScrape = useCallback(() => {
+    if (selectedArticleIds.size === 0) {
+      toast.error('Please select articles to deep scrape');
+      return;
+    }
+    if (selectedArticleIds.size > 10) {
+      toast.error('Maximum 10 articles can be deep scraped at once');
+      return;
+    }
+    deepScrapeArticles(Array.from(selectedArticleIds));
+  }, [selectedArticleIds, deepScrapeArticles]);
+
+  const toggleSelectMode = useCallback(() => {
+    setIsSelectMode(prev => !prev);
+    if (isSelectMode) {
+      setSelectedArticleIds(new Set());
+    }
+  }, [isSelectMode]);
+
+  const handleSelectAll = useCallback(() => {
+    if (selectedArticleIds.size === newsItems.length) {
+      setSelectedArticleIds(new Set());
+    } else {
+      setSelectedArticleIds(new Set(newsItems.map(item => item.id)));
+    }
+  }, [newsItems, selectedArticleIds.size]);
 
   // Update selected article when newsItems changes (after re-summarization)
   useEffect(() => {
@@ -148,16 +180,66 @@ const Index = () => {
 
         {/* Filters & News Cards */}
         <div className="space-y-4 animate-fade-in">
-          <NewsFilters filters={filters} onFiltersChange={setFilters} />
+          <div className="flex items-center justify-between">
+            <NewsFilters filters={filters} onFiltersChange={setFilters} />
+            <div className="flex items-center gap-2">
+              {isSelectMode && (
+                <>
+                  <span className="text-sm text-muted-foreground">
+                    {selectedArticleIds.size} selected
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectAll}
+                  >
+                    {selectedArticleIds.size === newsItems.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleDeepScrape}
+                    disabled={isDeepScraping || selectedArticleIds.size === 0}
+                    className="gap-2 gradient-primary"
+                  >
+                    <Zap className={`h-4 w-4 ${isDeepScraping ? 'animate-pulse' : ''}`} />
+                    {isDeepScraping ? 'Scraping...' : `Deep Scrape (${selectedArticleIds.size})`}
+                  </Button>
+                </>
+              )}
+              <Button
+                variant={isSelectMode ? "default" : "outline"}
+                size="sm"
+                onClick={toggleSelectMode}
+                className="gap-2"
+              >
+                {isSelectMode ? (
+                  <>
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4" />
+                    Deep Scrape
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-muted-foreground">Loading articles...</div>
             </div>
           ) : (
-            <NewsCardsGrid items={newsItems} onArticleClick={handleArticleClick} />
+            <NewsCardsGrid 
+              items={newsItems} 
+              onArticleClick={handleArticleClick}
+              selectedIds={selectedArticleIds}
+              onSelectionChange={setSelectedArticleIds}
+              showSelection={isSelectMode}
+            />
           )}
         </div>
-
         {/* Sources Info */}
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-start gap-3">
