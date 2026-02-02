@@ -62,6 +62,14 @@ async function scrapeFullArticle(url: string, apiKey: string): Promise<string | 
         if (p.length < 50) return false;
         // Skip lines that look like dates, bylines, or metadata
         if (/^(by\s|written by|author:|published|updated|date:|photo:|image:|credit:|source:|follow|subscribe|sign up|newsletter)/i.test(p)) return false;
+        // Skip newsletter/subscription prompts
+        if (/newsletter|subscribe now|subscribe to|sign up for|get daily update|daily digest|weekly digest|join our|become a member|premium member|click here to log in|already a member/i.test(p)) return false;
+        // Skip press release boilerplate
+        if (/more releases from this source|personnel announcements|about the company|for more information|media contact|press release|forward-looking statements/i.test(p)) return false;
+        // Skip ad-related content
+        if (/remove ad|advertisement|sponsored|promoted content|partner content|paid post|affiliate link/i.test(p)) return false;
+        // Skip social media prompts
+        if (/share this|follow us|like us on|join us on|connect with us|find us on|twitter|facebook|instagram|linkedin|youtube/i.test(p)) return false;
         // Skip lines with too many special characters or numbers (likely metadata)
         const specialCharRatio = (p.match(/[^a-zA-Z\s]/g) || []).length / p.length;
         if (specialCharRatio > 0.3) return false;
