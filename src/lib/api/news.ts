@@ -93,7 +93,12 @@ export const newsApi = {
       throw error;
     }
 
-    return (data || []) as NewsRawItem[];
+    // Filter out press release distribution titles
+    const filtered = (data || []).filter((item: any) => 
+      !/press release.*news distribution/i.test(item.headline || '')
+    );
+
+    return filtered as NewsRawItem[];
   },
 
   // Fetch all news_to_process articles
@@ -108,7 +113,12 @@ export const newsApi = {
       throw error;
     }
 
-    return (data || []) as NewsToProcessItem[];
+    // Filter out press release distribution titles
+    const filtered = (data || []).filter((item: any) => 
+      !/press release.*news distribution/i.test(item.source_name || '')
+    );
+
+    return filtered as NewsToProcessItem[];
   },
 
   // Get stats from database

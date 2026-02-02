@@ -253,7 +253,8 @@ async function scrapeArticlePage(url: string, sourceName: string, apiKey: string
       publishedAt = new Date().toISOString();
     }
     
-    if (!headline || headline.length < 10) {
+    // Skip press release distribution titles
+    if (!headline || headline.length < 10 || /press release.*news distribution/i.test(headline)) {
       return null;
     }
     
