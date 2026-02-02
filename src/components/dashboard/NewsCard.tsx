@@ -12,6 +12,7 @@ interface NewsCardProps {
   isSelected?: boolean;
   onSelectChange?: (selected: boolean) => void;
   showSelection?: boolean;
+  isDeepScraping?: boolean;
 }
 
 const statusConfig: Record<string, { icon: React.ElementType; className: string }> = {
@@ -21,21 +22,31 @@ const statusConfig: Record<string, { icon: React.ElementType; className: string 
   failed: { icon: AlertCircle, className: 'bg-destructive/10 text-destructive border-destructive/20' },
 };
 
-export function NewsCard({ item, onClick, isSelected, onSelectChange, showSelection }: NewsCardProps) {
+export function NewsCard({ item, onClick, isSelected, onSelectChange, showSelection, isDeepScraping }: NewsCardProps) {
   const status = statusConfig[item.status] || statusConfig.pending;
   const StatusIcon = status.icon;
 
   return (
     <div
       className={cn(
-        "group rounded-xl border bg-card p-5 shadow-card transition-all duration-300 hover:shadow-lg hover:border-primary/30 animate-fade-in cursor-pointer",
-        isSelected && "ring-2 ring-primary border-primary/50"
+        "group relative rounded-xl border bg-card p-5 shadow-card transition-all duration-300 hover:shadow-lg hover:border-primary/30 animate-fade-in cursor-pointer",
+        isSelected && "ring-2 ring-primary border-primary/50",
+        isDeepScraping && "opacity-75"
       )}
       onClick={onClick}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
     >
+      {/* Deep Scraping Overlay */}
+      {isDeepScraping && (
+        <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-xl z-10">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-sm font-medium text-primary">Deep Scraping...</span>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
@@ -128,6 +139,7 @@ interface NewsCardsGridProps {
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
   showSelection?: boolean;
+  scrapingIds?: Set<string>;
 }
 
 export function NewsCardsGrid({ 
@@ -136,7 +148,8 @@ export function NewsCardsGrid({
   onArticleClick, 
   selectedIds = new Set(), 
   onSelectionChange,
-  showSelection = false 
+  showSelection = false,
+  scrapingIds = new Set()
 }: NewsCardsGridProps) {
   const handleSelectChange = (id: string, selected: boolean) => {
     const newSelection = new Set(selectedIds);
@@ -188,6 +201,7 @@ export function NewsCardsGrid({
           isSelected={selectedIds.has(item.id)}
           onSelectChange={(selected) => handleSelectChange(item.id, selected)}
           showSelection={showSelection}
+          isDeepScraping={scrapingIds.has(item.id)}
         />
       ))}
     </div>

@@ -22,6 +22,7 @@ const Index = () => {
   const [resummarizingId, setResummarizingId] = useState<string | null>(null);
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
+  const [scrapingArticleIds, setScrapingArticleIds] = useState<Set<string>>(new Set());
 
   const {
     newsRaw,
@@ -85,7 +86,7 @@ const Index = () => {
     summarizeNews([articleId]);
   }, [summarizeNews]);
 
-  const handleDeepScrape = useCallback(() => {
+  const handleDeepScrape = useCallback(async () => {
     if (selectedArticleIds.size === 0) {
       toast.error('Please select articles to deep scrape');
       return;
@@ -94,7 +95,15 @@ const Index = () => {
       toast.error('Maximum 10 articles can be deep scraped at once');
       return;
     }
-    deepScrapeArticles(Array.from(selectedArticleIds));
+    // Set scraping state for selected articles
+    setScrapingArticleIds(new Set(selectedArticleIds));
+    try {
+      await deepScrapeArticles(Array.from(selectedArticleIds));
+    } finally {
+      // Clear scraping state when done
+      setScrapingArticleIds(new Set());
+      setSelectedArticleIds(new Set());
+    }
   }, [selectedArticleIds, deepScrapeArticles]);
 
   const toggleSelectMode = useCallback(() => {
@@ -237,6 +246,7 @@ const Index = () => {
               selectedIds={selectedArticleIds}
               onSelectionChange={setSelectedArticleIds}
               showSelection={isSelectMode}
+              scrapingIds={scrapingArticleIds}
             />
           )}
         </div>

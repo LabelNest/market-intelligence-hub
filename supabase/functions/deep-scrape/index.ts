@@ -53,8 +53,42 @@ async function scrapeFullArticle(url: string, apiKey: string): Promise<string | 
       .replace(/^\s+|\s+$/gm, '') // Trim each line
       .trim();
     
-    // Get the full content (up to 5000 chars for deep scrape)
-    return cleanedContent.substring(0, 5000);
+    // Split into paragraphs and filter for quality content
+    const paragraphs = cleanedContent
+      .split(/\n\n+/)
+      .map((p: string) => p.replace(/\n/g, ' ').trim())
+      .filter((p: string) => {
+        // Must be at least 50 chars to be meaningful
+        if (p.length < 50) return false;
+        // Skip lines that look like dates, bylines, or metadata
+        if (/^(by\s|written by|author:|published|updated|date:|photo:|image:|credit:|source:|follow|subscribe|sign up|newsletter)/i.test(p)) return false;
+        // Skip lines with too many special characters or numbers (likely metadata)
+        const specialCharRatio = (p.match(/[^a-zA-Z\s]/g) || []).length / p.length;
+        if (specialCharRatio > 0.3) return false;
+        // Skip short sentences that are likely navigation or UI elements
+        if (p.split(' ').length < 8) return false;
+        return true;
+      });
+    
+    // Find the most content-rich paragraphs (longest ones with good sentence structure)
+    const scoredParagraphs = paragraphs.map((p: string, index: number) => {
+      // Score based on length, position (middle is better), and sentence count
+      const sentenceCount = (p.match(/[.!?]+/g) || []).length;
+      const wordCount = p.split(/\s+/).length;
+      const positionScore = index > 0 && index < paragraphs.length - 1 ? 1.2 : 1; // Prefer middle paragraphs
+      const score = (wordCount * 0.5 + sentenceCount * 10) * positionScore;
+      return { text: p, score, index };
+    });
+    
+    // Sort by score and take top 2-3 paragraphs
+    scoredParagraphs.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
+    const topParagraphs = scoredParagraphs.slice(0, 3);
+    
+    // Re-sort by original position for natural reading order
+    topParagraphs.sort((a: { index: number }, b: { index: number }) => a.index - b.index);
+    
+    const bodyText = topParagraphs.map((p: { text: string }) => p.text).join(' ').substring(0, 5000);
+    return bodyText || cleanedContent.substring(0, 5000);
   } catch (error) {
     console.error(`[DeepScrape] Error scraping ${url}:`, error);
     return null;
