@@ -215,6 +215,20 @@ export const newsApi = {
     return data as DeepScrapeResponse;
   },
 
+  // Clean existing body text in database
+  async cleanBodyText(): Promise<{ success: boolean; message?: string; error?: string }> {
+    const { data, error } = await supabase.functions.invoke('clean-body-text', {
+      body: {},
+    });
+
+    if (error) {
+      console.error('Error cleaning body text:', error);
+      return { success: false, error: error.message };
+    }
+
+    return data;
+  },
+
   // Export to CSV
   exportToCsv(items: NewsRawItem[] | NewsToProcessItem[], filename: string): void {
     let csvContent: string;
