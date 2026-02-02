@@ -12,6 +12,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { cleanBodyText } from '@/lib/utils/textCleaner';
 
 interface ArticleDetailModalProps {
   article: NewsItem | null;
@@ -96,7 +97,7 @@ export function ArticleDetailModal({
               </h3>
               <div className="rounded-lg border bg-background p-4">
                 <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                  {article.content || 'No content available. Click the source link to read the full article.'}
+                  {cleanBodyText(article.content) || 'No content available. Click the source link to read the full article.'}
                 </p>
               </div>
             </div>

@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.summarize-news]
 verify_jwt = false
+
+[functions.deep-scrape]
+verify_jwt = false
+
+[functions.clean-body-text]
+verify_jwt = false

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { cleanBodyText } from '@/lib/utils/textCleaner';
 
 interface NewsCardProps {
   item: NewsItem;
@@ -75,7 +76,7 @@ export function NewsCard({ item, onClick, isSelected, onSelectChange, showSelect
 
       {/* Content Preview */}
       <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-        {item.content}
+        {cleanBodyText(item.content)}
       </p>
 
       {/* AI Summary */}
