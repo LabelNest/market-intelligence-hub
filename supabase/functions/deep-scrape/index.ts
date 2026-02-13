@@ -41,62 +41,119 @@ async function scrapeFullArticle(url: string, apiKey: string): Promise<string | 
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || '';
     
-    // Clean the markdown to get readable text
-    const cleanedContent = markdown
-      .replace(/^#{1,6}\s+[^\n]+\n?/gm, '') // Remove headings
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert links to text
-      .replace(/!\[[^\]]*\]\([^)]+\)/g, '') // Remove images
-      .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
-      .replace(/\*([^*]+)\*/g, '$1') // Remove italic
-      .replace(/^\s*[-*•]\s+/gm, '') // Remove list markers
-      .replace(/\n{3,}/g, '\n\n') // Normalize newlines
-      .replace(/^\s+|\s+$/gm, '') // Trim each line
+    // Aggressively clean the markdown before extracting content
+    let cleaned = markdown
+      // Remove markdown formatting
+      .replace(/^#{1,6}\s+[^\n]+\n?/gm, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/^\s*[-*•]\s+/gm, '')
+      // Collapse all whitespace into single spaces
+      .replace(/\s+/g, ' ')
       .trim();
     
-    // Split into paragraphs and filter for quality content
-    const paragraphs = cleanedContent
-      .split(/\n\n+/)
-      .map((p: string) => p.replace(/\n/g, ' ').trim())
-      .filter((p: string) => {
-        // Must be at least 50 chars to be meaningful
-        if (p.length < 50) return false;
-        // Skip lines that look like dates, bylines, or metadata
-        if (/^(by\s|written by|author:|published|updated|date:|photo:|image:|credit:|source:|follow|subscribe|sign up|newsletter)/i.test(p)) return false;
-        // Skip newsletter/subscription prompts
-        if (/newsletter|subscribe now|subscribe to|sign up for|get daily update|daily digest|weekly digest|join our|become a member|premium member|click here to log in|already a member/i.test(p)) return false;
-        // Skip press release boilerplate
-        if (/more releases from this source|personnel announcements|about the company|for more information|media contact|press release|forward-looking statements/i.test(p)) return false;
-        // Skip ad-related content
-        if (/remove ad|advertisement|sponsored|promoted content|partner content|paid post|affiliate link/i.test(p)) return false;
-        // Skip social media prompts
-        if (/share this|follow us|like us on|join us on|connect with us|find us on|twitter|facebook|instagram|linkedin|youtube/i.test(p)) return false;
-        // Skip lines with too many special characters or numbers (likely metadata)
-        const specialCharRatio = (p.match(/[^a-zA-Z\s]/g) || []).length / p.length;
-        if (specialCharRatio > 0.3) return false;
-        // Skip short sentences that are likely navigation or UI elements
-        if (p.split(' ').length < 8) return false;
+    // Remove junk phrases inline (since content may not have clean line breaks)
+    const junkPatterns = [
+      /skip to (content|main|navigation)\s*!?/gi,
+      /accessibility:?\s*skip\s*topnav/gi,
+      /share on (facebook|x|linkedin|reddit|email)/gi,
+      /share over email/gi,
+      /copy share link/gi,
+      /image credits?:?\s*[^.]{0,50}/gi,
+      /view bio\s*(see more)?/gi,
+      /subscribe for .{0,60}(news|updates|digest)/gi,
+      /every weekday .{0,80}coverage/gi,
+      /subscribe now\s*!?/gi,
+      /sign up for .{0,40}newsletter/gi,
+      /get daily update.{0,40}newsletter/gi,
+      /stay up to date with .{0,60}daily/gi,
+      /become a premium member/gi,
+      /already a member\??\s*click here to log in/gi,
+      /more releases from this source/gi,
+      /personnel announcements/gi,
+      /forward-looking statements/gi,
+      /about the company/gi,
+      /for more information,?\s*(please\s*)?(contact|visit|call)/gi,
+      /media contact:?/gi,
+      /remove ad\.{0,3}/gi,
+      /advertisement/gi,
+      /sponsored content/gi,
+      /follow us on/gi,
+      /connect with us/gi,
+      /read more\s*$/gi,
+      /see more\s*!?/gi,
+      /in brief\s*$/gi,
+      /\b(he|she) can be reached at [^\s]+@[^\s]+[^\.]*/gi,
+      /on signal at [\d\-]+/gi,
+      /photo by [^.)]+(\)|\.)/gi,
+      /\(photo[^)]*\)/gi,
+      // Navigation/tracker junk commonly from Crunchbase and similar sites
+      /unicorn board/gi,
+      /tech layoffs tracker/gi,
+      /billion-dollar exits/gi,
+      /largest funding deals tracker/gi,
+      /web3 tracker/gi,
+      /venture funding reports/gi,
+      /Q\d 20\d{2}( global| north america| europe| latin america| asia)?/gi,
+      /20\d{2}( global| north america| europe| latin america| asia)/gi,
+      // Event/conference promos
+      /techcrunch event[^.]*register now/gi,
+      /tickets are live .{0,100}building what's next/gi,
+      /\d+ sessions/gi,
+      /\d+ startups building/gi,
+      // Author bios at end
+      /\b\w+ on twitter\b/gi,
+      /you can contact or verify outreach.{0,100}signal/gi,
+      /!event logo[^.]*$/gi,
+      // Markdown image references
+      /!\[.*?\]\(.*?\)/gi,
+      // Tags sections
+      /^tags\s+\w/gim,
+      // Pipe-separated metadata tables
+      /\|\s*---\s*\|/g,
+      /\|\s*phone:\s*\|/gi,
+      /\|\s*fax:\s*\|/gi,
+      // Author name + handle + shares patterns
+      /\b\w+\s+\w+\s+\d+shares/gi,
+      /\bjglasner\b/gi,
+      // "Email Facebook Twitter LinkedIn" share bars
+      /\bemail\s+facebook\s+twitter\s+linkedin\b/gi,
+      // Short year references that are nav items
+      /\b20\d{2}\b(?=\s+20\d{2})/g,
+    ];
+    
+    for (const pattern of junkPatterns) {
+      cleaned = cleaned.replace(pattern, ' ');
+    }
+    
+    // Split into sentences
+    const sentences = cleaned
+      .split(/(?<=[.!?])\s+/)
+      .map((s: string) => s.trim())
+      .filter((s: string) => {
+        if (s.length < 40) return false;
+        if (s.split(/\s+/).length < 6) return false;
+        // Too many special chars = metadata
+        const specialRatio = (s.match(/[^a-zA-Z\s.,'"$%\-()]/g) || []).length / s.length;
+        if (specialRatio > 0.25) return false;
+        // Skip navigation/chrome
+        if (/^(newsroom|services|contact|english|sign in|register|menu|home|search)\b/i.test(s)) return false;
+        if (/newsletter|subscribe|premium member|cookie|privacy policy|terms of (use|service)/i.test(s)) return false;
+        if (/globe newswire|pr newswire|business wire/i.test(s)) return false;
+        // Skip bylines and timestamps at start
+        if (/^\w[\w\s]{0,30}\d{1,2}:\d{2}\s*(AM|PM)\s*(PST|EST|CST|UTC)/i.test(s)) return false;
+        // Skip "Illustration:" or "Tags" sections
+        if (/^(illustration|tags|topics|related|previous|next)\s*:/i.test(s)) return false;
+        // Skip author bio patterns
+        if (/is a (senior\s+)?(reporter|writer|editor|journalist|correspondent)\s+at/i.test(s)) return false;
         return true;
       });
     
-    // Find the most content-rich paragraphs (longest ones with good sentence structure)
-    const scoredParagraphs = paragraphs.map((p: string, index: number) => {
-      // Score based on length, position (middle is better), and sentence count
-      const sentenceCount = (p.match(/[.!?]+/g) || []).length;
-      const wordCount = p.split(/\s+/).length;
-      const positionScore = index > 0 && index < paragraphs.length - 1 ? 1.2 : 1; // Prefer middle paragraphs
-      const score = (wordCount * 0.5 + sentenceCount * 10) * positionScore;
-      return { text: p, score, index };
-    });
-    
-    // Sort by score and take top 2-3 paragraphs
-    scoredParagraphs.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-    const topParagraphs = scoredParagraphs.slice(0, 3);
-    
-    // Re-sort by original position for natural reading order
-    topParagraphs.sort((a: { index: number }, b: { index: number }) => a.index - b.index);
-    
-    const bodyText = topParagraphs.map((p: { text: string }) => p.text).join(' ').substring(0, 5000);
-    return bodyText || cleanedContent.substring(0, 5000);
+    // Join all clean sentences - no scoring, just take all quality content
+    const bodyText = sentences.join(' ').replace(/\s{2,}/g, ' ').trim().substring(0, 5000);
+    return bodyText || null;
   } catch (error) {
     console.error(`[DeepScrape] Error scraping ${url}:`, error);
     return null;
